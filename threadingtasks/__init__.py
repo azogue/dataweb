@@ -3,19 +3,18 @@
 Gestión de datos recogidos en web de forma periódica
 @author: Eugenio Panadero
 """
+import threading
+import time
+import numpy as np
+from prettyprinting import print_ok, print_bold
+
+
 __author__ = 'Eugenio Panadero'
 __copyright__ = "Copyright 2015, AzogueLabs"
 __credits__ = ["Eugenio Panadero"]
 __license__ = "GPL"
 __version__ = "1.0"
 __maintainer__ = "Eugenio Panadero"
-
-import threading
-import time
-
-import numpy as np
-# Colored output
-from prettyprinting import print_ok, print_bold
 
 
 def procesa_tareas_paralelo(lista_tareas, dict_data, func_process,
@@ -27,6 +26,7 @@ def procesa_tareas_paralelo(lista_tareas, dict_data, func_process,
     tomando los datos del diccionario y depositando su salida en el mismo lugar.
     * Necesita el puntero a función 'func_process', cuya definición debe ser de la forma:
         'func_process(key_tarea, dict_data_in_out)'
+        :param dict_data:
     """
 
     num_tareas = len(lista_tareas)
@@ -35,7 +35,7 @@ def procesa_tareas_paralelo(lista_tareas, dict_data, func_process,
     if num_tareas > 1 and usar_multithread:
         tic_init = time.time()
         threads = [threading.Thread(target=func_process, args=(tarea, dict_data,)) for tarea in lista_tareas]
-        lista_threads = [threads[i:i + max_threads] for i in np.arange(0, len(threads), max_threads)]
+        lista_threads = [threads[i:i + int(max_threads)] for i in np.arange(0, len(threads), int(max_threads))]
         cont_tareas = 0
         for th in lista_threads:
             tic = time.time()

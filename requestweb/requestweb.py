@@ -1,4 +1,17 @@
 # -*- coding: utf-8 -*-
+import datetime as dt
+import httplib2
+from httplib2 import Http
+import logging
+import numpy as np
+import pandas as pd
+import socket
+import time
+from dataweb.threadingtasks import procesa_tareas_paralelo
+from dataweb.mergedataweb import merge_data
+from prettyprinting import print_warn, print_err
+
+
 """
 Gestión de datos recogidos en web de forma periódica
 @author: Eugenio Panadero
@@ -9,19 +22,6 @@ __credits__ = ["Eugenio Panadero"]
 __license__ = "GPL"
 __version__ = "1.0"
 __maintainer__ = "Eugenio Panadero"
-
-import datetime as dt
-import time
-import socket
-
-import numpy as np
-import pandas as pd
-import httplib2
-from httplib2 import Http
-
-from dataweb.threadingtasks import procesa_tareas_paralelo
-from dataweb.mergedataweb import merge_data
-from prettyprinting import print_warn, print_err
 
 
 # Variables por defecto
@@ -53,25 +53,31 @@ def request_data_url(url, http=None, num_retries=NUM_RETRIES, timeout=TIMEOUT):
         except httplib2.ServerNotFoundError as e:
             if count == num_retries - 1:
                 print_warn('ERROR: ' + str(e) + ' ¿No hay conexión de internet??')
+                logging.error('ERROR: ' + str(e) + ' ¿No hay conexión de internet??')
         except socket.error as e:  # [Errno 60] Operation timed out
             if count == num_retries - 2:
-                print_warn('%luº EXCEPCIÓN: 60 Operation timed out?? [%s] EXC: %s' % (count + 1, url, str(e)))
+                print_warn('{}º EXCEPCIÓN: 60 Operation timed out?? [{}] EXC: {}'.format(count + 1, url, e))
+                logging.debug('{}º EXCEPCIÓN: 60 Operation timed out?? [{}] EXC: {}'.format(count + 1, url, e))
             time.sleep(1)
         except (httplib2.HttpLib2Error, httplib2.HttpLib2ErrorWithResponse) as e:  # , urllib.URLError) as e:
             if count > 1:
                 print_warn(type(e))
+                logging.error(type(e))
                 print_warn('HttpLib2Error?, HttpLib2ErrorWithResponse?, urllib.URLError?')
-                # TODO except error: [Errno 60] Operation timed out; ResponseNotReady
+                # notTODO except error: [Errno 60] Operation timed out; ResponseNotReady
         except TypeError as e:
             print_warn('TypeError')
+            logging.error(str(e))
             print_warn(str(e))
         except Exception as e:
             if count > 0:
+                logging.error('%luº Exception no reconocida: %s!!' % (count + 1, type(e)))
                 print_err('%luº Exception no reconocida: %s!!' % (count + 1, type(e)))
                 print_warn(str(e))
         count += 1
     if count > 0 and count == num_retries:
         print_err('NO SE HA PODIDO OBTENER LA INFO EN %s' % url)
+        logging.error('NO SE HA PODIDO OBTENER LA INFO EN %s' % url)
     return status, response
 
 
@@ -120,17 +126,15 @@ def get_data_en_intervalo(d0=None, df=None, date_fmt=DATE_FMT,
         def _hay_errores_en_datos_obtenidos(dict_data_obtenida):
             data_es_none = [v is None for v in dict_data_obtenida.values()]
             if any(data_es_none):
-                # TODO MEJORAR CON DÍAS
-                print_err('HAY TAREAS NO REALIZADAS:')
-                print_err(data_es_none)
-                # print([list(dict_data_obtenida)[ind] for ind in np.nonzero(data_es_none)])
+                bad_days = [k for k, is_bad in zip(list(sorted(dict_data_obtenida.keys())), data_es_none) if is_bad]
+                logging.error('HAY TAREAS NO REALIZADAS:\n{}'.format(bad_days))
+                print_err('HAY TAREAS NO REALIZADAS:\n{}'.format(bad_days))
                 return True
             return False
 
         def _obtiene_request(url, key, http):
             if type(url) is list:
-                lista_stat = list()
-                lista_resp = list()
+                lista_stat, lista_resp = [], []
                 for u in url:
                     stat_response = request_data_url(u, http, num_retries, timeout)
                     lista_stat.append(stat_response[0])
@@ -152,8 +156,8 @@ def get_data_en_intervalo(d0=None, df=None, date_fmt=DATE_FMT,
                         dict_data_responses[key] = data_import
                     count_process += 1
             except Exception as e:
-                print_err('ERROR PROCESANDO DATA!???? (Exception: %s)' % str(e))
-                # TODO Realizar control de timeout's para salida sin nuevos datos
+                print_err('ERROR PROCESANDO DATA!???? (Exception: {}; KEY: {}; URL: {})'.format(e, key, url))
+                logging.error('ERROR PROCESANDO DATA!???? (Exception: {}; KEY: {}; URL: {})'.format(e, key, url))
                 dict_data_responses[key] = None
 
         tic_ini = time.time()
@@ -168,7 +172,7 @@ def get_data_en_intervalo(d0=None, df=None, date_fmt=DATE_FMT,
                                 usar_multithread, max_threads_requests)
         hay_errores = _hay_errores_en_datos_obtenidos(dict_data)
         # MERGE DATOS
-        if not hay_errores:
+        if not hay_errores and num_dias > 0:
             data_merge = _procesa_merge_datos_dias(lista_dias, dict_data)
             str_resumen_import = '\n%lu días importados [Proceso Total %.2f seg, %.4f seg/día]' \
                                  % (num_dias, time.time() - tic_ini, (time.time() - tic_ini) / float(num_dias))

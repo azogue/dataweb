@@ -3,6 +3,18 @@
 Gestión de datos recogidos en web de forma periódica
 @author: Eugenio Panadero
 """
+import datetime as dt
+import logging
+import numpy as np
+import os
+import pandas as pd
+import pytz
+from prettyprinting import print_warn, print_err, print_ok, print_info, print_secc, print_bold
+from dataweb.requestweb.requestweb import get_data_en_intervalo
+from dataweb.mergedataweb import merge_data
+from dataweb.requestweb.requestweb import USAR_MULTITHREAD, NUM_RETRIES, TIMEOUT, DATE_FMT, MAX_THREADS_REQUESTS
+
+
 __author__ = 'Eugenio Panadero'
 __copyright__ = "Copyright 2015, AzogueLabs"
 __credits__ = ["Eugenio Panadero"]
@@ -10,27 +22,12 @@ __license__ = "GPL"
 __version__ = "1.0"
 __maintainer__ = "Eugenio Panadero"
 
-import datetime as dt
-import os
-
-import numpy as np
-import pandas as pd
-import pytz
-
-# Colored output
-from prettyprinting import print_warn, print_err, print_ok, print_info, print_secc, print_bold
-
-from dataweb.requestweb.requestweb import get_data_en_intervalo
-from dataweb.mergedataweb import merge_data
-from dataweb.requestweb.requestweb import USAR_MULTITHREAD, NUM_RETRIES, TIMEOUT, DATE_FMT, MAX_THREADS_REQUESTS
-
 # Variables por defecto
 KEY_DATA = 'data'
 TZ = pytz.timezone('Europe/Madrid')
 DATE_INI = '2015-01-01'
 
 # Pandas output display config:
-# pd.set_option('display.height', 1000)
 pd.set_option('display.max_rows', 75)
 pd.set_option('display.max_columns', 25)
 pd.set_option('display.width', 240)  # 4x para pantalla ancha
@@ -53,7 +50,7 @@ class DataWeb(object):
     def __init__(self,
                  path_database='store.h5',
                  titulo='Datos de: WEB XXXXXX',
-                 forzar_update=False, verbose=True,
+                 forzar_update=False, verbose=True, update_init=True,
                  **kwargs):
         # Init
         self.PATH_DATABASE = os.path.abspath(path_database)
@@ -63,7 +60,7 @@ class DataWeb(object):
         self.titulo = titulo
         self.verbose = verbose
         self.data = dict()
-        self.update_init, self.USAR_MULTITHREAD = True, USAR_MULTITHREAD
+        self.update_init, self.USAR_MULTITHREAD = update_init, USAR_MULTITHREAD
         # Limita el nº de días a actualizar de golpe (útil en las etapas iniciales de implementación)
         self.MAX_ACT_EXEC = 1000000
         self.TZ = TZ
@@ -86,10 +83,7 @@ class DataWeb(object):
             self.update_data(forzar_update)
         else:
             self.load_data()
-
-        self.printif('\nINFORMACIÓN EN BASE DE DATOS:', 'info')
-        # [self.info_data(data[k],verbose=self.verbose) for k in data.keys()]
-        self.printif(self.store, 'info')
+        self.printif('\nINFORMACIÓN EN BASE DE DATOS:\n{}'.format(self.store), 'info')
 
     # you want to override this on the child classes
     def url_data_dia(self, key_dia):
@@ -100,6 +94,11 @@ class DataWeb(object):
     def procesa_data_dia(self, key_dia, response):
         # data_import, ok = func_procesa_data_dia(key_dia, response)
         raise NotImplementedError
+
+    # you can override this on the child classes
+    def post_update_data(self):
+        # raise NotImplementedError
+        pass
 
     def __get_data_en_intervalo(self, d0=None, df=None):
         """
@@ -127,8 +126,8 @@ class DataWeb(object):
         Obtiene el Timestamp del último valor de la base de datos seleecionada,
         junto con el nº de entradas (filas) total de dicho paquete de datos.
 
-        :param data_revisar (OPC): Se puede pasar un dataframe específico
-        :param key_revisar (OPC): Normalmente, para utilizar 'dem'
+        :param data_revisar: (OPC) Se puede pasar un dataframe específico
+        :param key_revisar: (OPC) Normalmente, para utilizar 'dem'
         :return: tmax, num_entradas
         """
         key_revisar = key_revisar or self.masterkey
@@ -141,24 +140,35 @@ class DataWeb(object):
             return pd.Timestamp(dt.datetime.strptime(self.DATE_INI, self.DATE_FMT), tz=self.TZ).to_datetime(), 0
 
     def printif(self, obj_print, tipo_print=None):
-        if self.verbose:
-            if tipo_print is None:
+        if tipo_print is None:
+            if self.verbose:
                 print(obj_print)
-            elif tipo_print == 'secc':
+        elif tipo_print == 'secc':
+            if self.verbose:
                 print_secc(obj_print)
-            elif tipo_print == 'ok':
+        elif tipo_print == 'ok':
+            if self.verbose:
                 print_ok(obj_print)
-            elif tipo_print == 'info':
+            logging.info(obj_print)
+        elif tipo_print == 'info':
+            if self.verbose:
                 print_info(obj_print)
-            elif tipo_print == 'error':
+        elif tipo_print == 'error':
+            if self.verbose:
                 print_err(obj_print)
-            elif tipo_print == 'warning':
+            logging.error(obj_print)
+        elif tipo_print == 'warning':
+            if self.verbose:
                 print_warn(obj_print)
-            elif tipo_print == 'bold':
+            logging.warning(obj_print)
+        elif tipo_print == 'bold':
+            if self.verbose:
                 print_bold(obj_print)
-            else:
+        else:
+            if self.verbose:
                 print_err(obj_print)
-                assert()
+            logging.error(obj_print)
+            assert()
 
     def __actualiza_datos(self, data_ant=None, tmax=None):
         data_act, hay_nueva_info = None, False
@@ -169,6 +179,8 @@ class DataWeb(object):
         else:
             data_act = data_ant
             now = dt.datetime.now(tz=self.TZ)
+            if self.DATE_FIN is not None:
+                now = min(now, pd.Timestamp(self.DATE_FIN, tz=self.TZ).to_datetime())
             delta = int(np.ceil((now - tmax).total_seconds() / self.TS_DATA))
             if delta > self.NUM_TS_MIN_PARA_ACT:
                 d0, df = tmax.date(), now.date()
@@ -200,25 +212,28 @@ class DataWeb(object):
                 data_ant = None
         except Exception as e:
             if not forzar_update:
-                print_warn('  --> NO SE PUEDE LEER LA BASE DE DATOS LOCAL HDF (Excepción leyendo: %s:%s)'
-                           % (type(e).__name__, str(e)))
-                self.printif('  --> Se procede a realizar la captura de TODOS los datos existentes:', 'warning')
+                self.printif('--> NO SE LEE DB_HDF (Exception: {}:{})'.format(type(e).__name__, str(e)), 'warning')
+                self.printif('--> Se procede a realizar la captura de TODOS los datos existentes:', 'warning')
             data_ant, tmax = None, None
         # Actualización de la base de datos
         data_act, hay_nueva_info = self.__actualiza_datos(data_ant, tmax)
         self.data = data_act
+        # Posibilidad de procesar todos los datos al final del update, antes de grabar a disco:
+        self.post_update_data()
         if hay_nueva_info:  # Grabación de la base de datos hdf en disco (local)
             self.save_data()
             tmax, num_entradas = self.last_entry()
-            self.printif('''\tNº entradas:\t%lu mediciones\n\tÚltima:     \t%s'''
-                         % (num_entradas, tmax.strftime('%d-%m-%Y %H:%M')), 'ok')
+            self.printif('\tNº rows:\t{} samples\n\tÚltima:\t{:%d-%m-%Y %H:%M}'.format(num_entradas, tmax), 'ok')
+        return hay_nueva_info
 
     def integridad_data(self, data_integr=None, key=None):
         """
         Comprueba que el index de cada dataframe de la base de datos sea de fechas, único (sin duplicados) y creciente
+        :param data_integr:
         """
         def _assert_integridad(df):
-            assert(df.index.is_unique and df.index.is_monotonic_increasing and df.index.is_all_dates)
+            if df is not None:
+                assert(df.index.is_unique and df.index.is_monotonic_increasing and df.index.is_all_dates)
 
         if data_integr is None:
             data_integr = self.data
@@ -247,22 +262,39 @@ class DataWeb(object):
             else:
                 _info_dataframe(data_info)
 
+    def _backup_last_store(self):
+        bkp_path = os.path.join(os.path.dirname(self.PATH_DATABASE), 'bkp_' + os.path.basename(self.PATH_DATABASE))
+        if os.path.exists(bkp_path):
+            os.remove(bkp_path)
+        os.rename(self.PATH_DATABASE, bkp_path)
+        self.store = pd.HDFStore(self.PATH_DATABASE)
+        # self.store.put('data', self.data['data'], mode='w')
+        # self.store.put('data_dias', self.data['data_dias'], mode='w')
+        # self.store.put('errores', self.data['errores'], mode='w')
+        # self.store.close()
+
     def save_data(self, dataframe=None, key_data=None):
-        """ Guarda en disco la información"""
+        """ Guarda en disco la información
+        :param dataframe:
+        """
 
         def _save_data_en_key(store, key_save, data_save):
-            # print(SALVANDO INFO en key=%s:' % key)
             try:
-                store.put(key_save, data_save, format='table', mode='w')
+                # TODO Revisar errores grabación HDF5 mode table vs fixed:
+                # TypeError: unorderable types: NoneType() >= tuple() al grabar HDF5 como 'table'
+                # store.put(key_save, data_save, format='table', mode='w')
+                store.put(key_save, data_save, mode='w')
             except TypeError as e:
-                print_err('ERROR SALVANDO INFO: %s' % str(e))
-                print_warn(key_save)
-                print_warn(data_save)
+                if self.verbose:
+                    print_err('ERROR SALVANDO INFO: {}\nKEY: {}; DATA:\n{}'.format(e, key_save, data_save))
+                logging.error('ERROR SALVANDO INFO: {}\nKEY: {}; DATA:\n{}'.format(e, key_save, data_save))
 
-        assert self.store.is_open
         self.integridad_data()
+        self.store.open()
         if dataframe is None:
             if key_data is None:
+                # Se elimina (backup) el fichero h5 anterior
+                self._backup_last_store()
                 for k in self.data.keys():
                     _save_data_en_key(self.store, k, self.data[k])
             else:
@@ -270,15 +302,12 @@ class DataWeb(object):
         else:
             _save_data_en_key(self.store, key_data or self.masterkey, dataframe)
         self.store.close()
-        self.store.open()
 
     def load_data(self, key=None, **kwargs):
-        """ Lee de disco la información y la devuelve"""
-        assert self.store.is_open
-        # self.printif('BASE DE DATOS EN [%s]: %lu tabla(s):' % (self.PATH_DATABASE, len(self.store.keys())))
-        # if self.verbose:
-        #     for k in self.store.keys():
-        #         print('CLAVE: %sTIPO: %s' % (k.ljust(20), self.store.get_storer(k)))
+        """ Lee de disco la información y la devuelve
+        :param key:
+        """
+        self.store.open()
         if key:
             return pd.read_hdf(self.PATH_DATABASE, key, **kwargs)
         else:
@@ -288,30 +317,27 @@ class DataWeb(object):
                 # **kwargs ej:= where=['index > 2009','index < 2010'],columns=['ordinal']
                 data_load[k] = pd.read_hdf(self.PATH_DATABASE, k, **kwargs)
             self.data = data_load
+        self.store.close()
         self.integridad_data()
 
     def append_delta_index(self, ts_data=None, data_delta=None, key=KEY_DATA):
+        reasign = False
         if data_delta is None:
-            data_delta = self.data[key]
+            if self.data is not None:
+                data_delta = self.data[key]
+            else:
+                logging.error('NO HAY DATOS PARA AÑADIR DELTA')
+                print_err('NO HAY DATOS PARA AÑADIR DELTA')
+                return None
             reasign = True
+        data_delta['delta'] = data_delta.index.tz_convert('UTC')
+        if ts_data is not None:
+            data_delta['delta'] = (data_delta['delta'] - data_delta['delta'].shift(1)).fillna(ts_data)
+            data_delta['delta_T'] = data_delta['delta'].apply(lambda x: pd.Timedelta(x).seconds) / ts_data
         else:
-            reasign = False
-        idx_utc = data_delta.index.tz_convert('UTC')
-        tt = idx_utc.values
-        delta = tt[1:] - tt[:-1]
-        if ts_data is None:
-            delta /= 1e9  # pasa a segs
-            data_delta['delta'] = pd.Series(data=delta, index=data_delta.index[1:])
-            data_delta.delta.fillna(1, inplace=True)
-        else:
-            delta.dtype = np.int64
-            delta /= 1e9 * ts_data
-            data_delta['delta_T'] = pd.Series(data=delta, index=data_delta.index[1:])
-            data_delta.delta_T.fillna(1, inplace=True)
+            data_delta['delta'] = (data_delta['delta'] - data_delta['delta'].shift(1)).fillna(0)
         if reasign:
             self.data[key] = data_delta
         else:
             return data_delta
 
-    def close(self):
-        self.store.close()
