@@ -18,15 +18,20 @@ __maintainer__ = "Eugenio Panadero"
 
 
 def procesa_tareas_paralelo(lista_tareas, dict_data, func_process,
-                            titulo=None, usar_multithread=True, max_threads=100):
+                            titulo=None, usar_multithread=True, max_threads=100, verbose=True):
     """
-    Procesa las tareas diarias en paralelo, limitando a un MAX de nº de threads. Especialmente útil para realizar
-    requests simultáneos a la web. Recibe una lista de tareas únicas (key_tarea) a realizar, junto con un diccionario
-    de la forma '{key_tarea : variable_in_out}', de forma que cada hilo de ejecución opera con su clave de tarea,
-    tomando los datos del diccionario y depositando su salida en el mismo lugar.
-    * Necesita el puntero a función 'func_process', cuya definición debe ser de la forma:
-        'func_process(key_tarea, dict_data_in_out)'
-        :param dict_data:
+    Procesa las tareas diarias en paralelo, limitando a un MAX de nº de threads.
+    Especialmente útil para realizar requests simultáneos a un servidor web concreto.
+        :param lista_tareas: Recibe una lista de tareas únicas (key_tarea) a realizar
+        :param dict_data: Diccionario de la forma '{key_tarea : variable_in_out}', de forma que cada hilo de ejecución
+                            opera con su clave de tarea, tomando los datos del diccionario y depositando su salida
+                            en el mismo lugar.
+        :param func_process: Necesita el puntero a función 'func_process', cuya definición debe ser de la forma:
+                            'func_process(key_tarea, dict_data_in_out)
+        :param titulo:
+        :param usar_multithread: True por defecto
+        :param max_threads: 100 por defecto
+        :param verbose: True por defecto
     """
 
     num_tareas = len(lista_tareas)
@@ -41,16 +46,17 @@ def procesa_tareas_paralelo(lista_tareas, dict_data, func_process,
             tic = time.time()
             [thread.start() for thread in th]
             [thread.join() for thread in th]
-            print(u"Procesado de tareas en paralelo [%lu->%lu, %%=%.1f]: %.2f seg [%.4f seg/tarea]"
-                  % (cont_tareas + 1, cont_tareas + len(th), 100. * (cont_tareas + len(th)) / float(num_tareas),
-                     (time.time() - tic), (time.time() - tic) / len(th)))
+            if verbose:
+                print("Procesado de tareas en paralelo [%lu->%lu, %%=%.1f]: %.2f seg [%.4f seg/tarea]"
+                      % (cont_tareas + 1, cont_tareas + len(th), 100. * (cont_tareas + len(th)) / float(num_tareas),
+                         (time.time() - tic), (time.time() - tic) / len(th)))
             cont_tareas += len(th)
         tic_fin = (time.time() - tic_init)
-        if num_tareas > 1 and usar_multithread and len(lista_threads) > 1:
+        if num_tareas > 1 and usar_multithread and len(lista_threads) > 1 and verbose:
             print_ok(u"Tiempo de proceso de tareas en paralelo TOTAL (%lu tareas): %.2f seg [%.4f seg/tarea]"
                      % (num_tareas, tic_fin, tic_fin / num_tareas))
     else:
         for tarea in lista_tareas:
-            if num_tareas > 3:
+            if num_tareas > 3 and verbose:
                 print_bold('Tarea: %s' % str(tarea))
             func_process(tarea, dict_data)

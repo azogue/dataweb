@@ -44,6 +44,7 @@ def merge_data(lista_dfs_o_dict, keys_merge=None):
     Aun cuando las DF's individuales estén localizadas (index con TZ), en ocasiones el merge aparece en UTC y requiere
     una operación de conversión a TZ: data_a_corregir.set_index(data_a_corregir.index.tz_convert(tz), inplace=True)
     :param lista_dfs_o_dict:
+    :param keys_merge: (OPC)
     """
 
     def _merge_lista(lista_dfs):
@@ -51,7 +52,7 @@ def merge_data(lista_dfs_o_dict, keys_merge=None):
             df0 = lista_dfs[0]
             df0.update(lista_dfs[1])
         elif ((all([len(df_i) == 1 for df_i in lista_dfs])) or
-                  (type(lista_dfs[0].index.freq) is Day and len(lista_dfs_o_dict) > 2)):
+                (type(lista_dfs[0].index.freq) is Day and len(lista_dfs_o_dict) > 2)):
             df0 = pd.concat(lista_dfs)
             if lista_dfs[0].index.freq and df0.index.freq is None:
                 df0.index.freq = lista_dfs[0].index.freq

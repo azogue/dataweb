@@ -41,6 +41,10 @@ def request_data_url(url, http=None, num_retries=NUM_RETRIES, timeout=TIMEOUT):
     y el texto recibido es mayor que MIN_LEN_REQUEST (=10).
     Resulta útil cuando se están realizando múltiples requests al mismo servidor (por velocidad), y no siempre
     las respuestas que emite son correctas.
+    :param url:
+    :param http:
+    :param num_retries:
+    :param timeout:
     """
     if http is None:
         http = Http(timeout=timeout)
@@ -84,7 +88,7 @@ def request_data_url(url, http=None, num_retries=NUM_RETRIES, timeout=TIMEOUT):
 def get_data_en_intervalo(d0=None, df=None, date_fmt=DATE_FMT,
                           usar_multithread=USAR_MULTITHREAD, max_threads_requests=MAX_THREADS_REQUESTS,
                           timeout=TIMEOUT, num_retries=NUM_RETRIES,
-                          func_procesa_data_dia=None, func_url_data_dia=None, max_act_exec=None):
+                          func_procesa_data_dia=None, func_url_data_dia=None, max_act_exec=None, verbose=True):
         """
         Obtiene los datos en bruto de la red realizando múltiples requests al tiempo
         Procesa los datos en bruto obtenidos de la red convirtiendo a Pandas DataFrame
@@ -116,7 +120,7 @@ def get_data_en_intervalo(d0=None, df=None, date_fmt=DATE_FMT,
                 dict_merge = dict(zip(keys_grupos, lista_grupos))
                 procesa_tareas_paralelo(keys_grupos, dict_merge, _merge_datos_dias,
                                         '\nMERGE DATAFRAMES DE DATOS WEB DIARIOS (%lu GRUPOS)',
-                                        usar_multithread, MAX_THREADS_MERGE)
+                                        usar_multithread, MAX_THREADS_MERGE, verbose=verbose)
                 dict_merge_final = {0: [dict_merge[k] for k in dict_merge.keys()]}
                 _merge_datos_dias(0, dict_merge_final)
                 return dict_merge_final[0]
@@ -128,7 +132,8 @@ def get_data_en_intervalo(d0=None, df=None, date_fmt=DATE_FMT,
             if any(data_es_none):
                 bad_days = [k for k, is_bad in zip(list(sorted(dict_data_obtenida.keys())), data_es_none) if is_bad]
                 logging.error('HAY TAREAS NO REALIZADAS:\n{}'.format(bad_days))
-                print_err('HAY TAREAS NO REALIZADAS:\n{}'.format(bad_days))
+                if verbose:
+                    print_err('HAY TAREAS NO REALIZADAS:\n{}'.format(bad_days))
                 return True
             return False
 
@@ -156,7 +161,8 @@ def get_data_en_intervalo(d0=None, df=None, date_fmt=DATE_FMT,
                         dict_data_responses[key] = data_import
                     count_process += 1
             except Exception as e:
-                print_err('ERROR PROCESANDO DATA!???? (Exception: {}; KEY: {}; URL: {})'.format(e, key, url))
+                if verbose:
+                    print_err('ERROR PROCESANDO DATA!???? (Exception: {}; KEY: {}; URL: {})'.format(e, key, url))
                 logging.error('ERROR PROCESANDO DATA!???? (Exception: {}; KEY: {}; URL: {})'.format(e, key, url))
                 dict_data_responses[key] = None
 
@@ -169,7 +175,7 @@ def get_data_en_intervalo(d0=None, df=None, date_fmt=DATE_FMT,
         # IMPORTA DATOS Y LOS PROCESA
         procesa_tareas_paralelo(lista_dias, dict_data, _obtiene_data_dia,
                                 '\nPROCESADO DE DATOS WEB DE %lu DÍAS',
-                                usar_multithread, max_threads_requests)
+                                usar_multithread, max_threads_requests, verbose=verbose)
         hay_errores = _hay_errores_en_datos_obtenidos(dict_data)
         # MERGE DATOS
         if not hay_errores and num_dias > 0:

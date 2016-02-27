@@ -57,6 +57,7 @@ class DataWeb(object):
         if not os.path.exists(self.PATH_DATABASE):
             forzar_update = True
         self.store = pd.HDFStore(self.PATH_DATABASE)
+        self.store.close()
         self.titulo = titulo
         self.verbose = verbose
         self.data = dict()
@@ -83,7 +84,7 @@ class DataWeb(object):
             self.update_data(forzar_update)
         else:
             self.load_data()
-        self.printif('\nINFORMACIÓN EN BASE DE DATOS:\n{}'.format(self.store), 'info')
+        # self.printif('\nINFORMACIÓN EN BASE DE DATOS:\n{}'.format(self.store), 'info')
 
     # you want to override this on the child classes
     def url_data_dia(self, key_dia):
@@ -110,7 +111,7 @@ class DataWeb(object):
                   'usar_multithread': self.USAR_MULTITHREAD, 'max_threads_requests': self.MAX_THREADS_REQUESTS,
                   'timeout': self.TIMEOUT, 'num_retries': self.NUM_RETRIES,
                   'func_procesa_data_dia': self.procesa_data_dia, 'func_url_data_dia': self.url_data_dia,
-                  'max_act_exec': self.MAX_ACT_EXEC}
+                  'max_act_exec': self.MAX_ACT_EXEC, 'verbose': self.verbose}
         data_get, hay_errores, str_import = get_data_en_intervalo(d0, df, **params)
         if not hay_errores:
             self.integridad_data(data_get)
@@ -218,9 +219,9 @@ class DataWeb(object):
         # Actualización de la base de datos
         data_act, hay_nueva_info = self.__actualiza_datos(data_ant, tmax)
         self.data = data_act
-        # Posibilidad de procesar todos los datos al final del update, antes de grabar a disco:
-        self.post_update_data()
         if hay_nueva_info:  # Grabación de la base de datos hdf en disco (local)
+            # Posibilidad de procesar todos los datos al final del update, antes de grabar a disco:
+            self.post_update_data()
             self.save_data()
             tmax, num_entradas = self.last_entry()
             self.printif('\tNº rows:\t{} samples\n\tÚltima:\t{:%d-%m-%Y %H:%M}'.format(num_entradas, tmax), 'ok')
@@ -230,6 +231,7 @@ class DataWeb(object):
         """
         Comprueba que el index de cada dataframe de la base de datos sea de fechas, único (sin duplicados) y creciente
         :param data_integr:
+        :param key:
         """
         def _assert_integridad(df):
             if df is not None:
@@ -268,14 +270,15 @@ class DataWeb(object):
             os.remove(bkp_path)
         os.rename(self.PATH_DATABASE, bkp_path)
         self.store = pd.HDFStore(self.PATH_DATABASE)
+        self.store.close()
         # self.store.put('data', self.data['data'], mode='w')
         # self.store.put('data_dias', self.data['data_dias'], mode='w')
         # self.store.put('errores', self.data['errores'], mode='w')
-        # self.store.close()
 
     def save_data(self, dataframe=None, key_data=None):
         """ Guarda en disco la información
         :param dataframe:
+        :param key_data:
         """
 
         def _save_data_en_key(store, key_save, data_save):
