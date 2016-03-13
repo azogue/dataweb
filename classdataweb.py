@@ -69,6 +69,7 @@ class DataWeb(object):
         self.NUM_TS_MIN_PARA_ACT = 1  # 1 entrada nueva para actualizar
         self.TS_DATA = 600  # Muestreo en segs.(1h)
         self.NUM_RETRIES, self.TIMEOUT, self.MAX_THREADS_REQUESTS = NUM_RETRIES, TIMEOUT, MAX_THREADS_REQUESTS
+        self.HEADERS, self.JSON_REQUESTS, self.PARAMS_REQUESTS = None, False, None
         # Re-definición de parámetros desde arriba
         self.keys_attrs = [k for k in kwargs]
         [setattr(self, k, kwargs[k]) for k in self.keys_attrs]
@@ -111,7 +112,11 @@ class DataWeb(object):
                   'usar_multithread': self.USAR_MULTITHREAD, 'max_threads_requests': self.MAX_THREADS_REQUESTS,
                   'timeout': self.TIMEOUT, 'num_retries': self.NUM_RETRIES,
                   'func_procesa_data_dia': self.procesa_data_dia, 'func_url_data_dia': self.url_data_dia,
-                  'max_act_exec': self.MAX_ACT_EXEC, 'verbose': self.verbose}
+                  'max_act_exec': self.MAX_ACT_EXEC,
+                  'data_extra_request': {'headers': self.HEADERS,
+                                         'json_req': self.JSON_REQUESTS,
+                                         'params_request': self.PARAMS_REQUESTS},
+                  'verbose': self.verbose}
         data_get, hay_errores, str_import = get_data_en_intervalo(d0, df, **params)
         if not hay_errores:
             self.integridad_data(data_get)
@@ -202,7 +207,7 @@ class DataWeb(object):
         try:
             if forzar_update:
                 self.printif('Se procede a actualizar TODOS los datos (force update ON)', 'info')
-                assert ()
+                assert()
             self.load_data()
             tmax, num_entradas = self.last_entry()
             if num_entradas > 0:
@@ -234,7 +239,7 @@ class DataWeb(object):
         :param key:
         """
         def _assert_integridad(df):
-            if df is not None:
+            if df is not None and not df.empty:
                 assert(df.index.is_unique and df.index.is_monotonic_increasing and df.index.is_all_dates)
 
         if data_integr is None:
@@ -265,12 +270,12 @@ class DataWeb(object):
                 _info_dataframe(data_info)
 
     def _backup_last_store(self):
+        self.store.close()
         bkp_path = os.path.join(os.path.dirname(self.PATH_DATABASE), 'bkp_' + os.path.basename(self.PATH_DATABASE))
         if os.path.exists(bkp_path):
             os.remove(bkp_path)
         os.rename(self.PATH_DATABASE, bkp_path)
         self.store = pd.HDFStore(self.PATH_DATABASE)
-        self.store.close()
         # self.store.put('data', self.data['data'], mode='w')
         # self.store.put('data_dias', self.data['data_dias'], mode='w')
         # self.store.put('errores', self.data['errores'], mode='w')

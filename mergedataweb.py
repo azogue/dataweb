@@ -28,7 +28,7 @@ def pdmerge_respeta_tz(tz_ant, func_merge, *args, **kwargs):
     :return: dataframe_merged con TZ anterior
     """
     df_merged = func_merge(*args, **kwargs)
-    if tz_ant != df_merged.index.tz:
+    if tz_ant is not None and tz_ant != df_merged.index.tz:
         # print_warn('Error pandas: join prevProg + demandaGeneracion pierde timezone (%s->%s)'
         #            % (data_import[KEYS_DATA[0]].index.tz, tz_ant))
         df_merged.index = df_merged.index.tz_convert(tz_ant)
@@ -67,11 +67,24 @@ def merge_data(lista_dfs_o_dict, keys_merge=None):
             keys_merge = lista_dfs_o_dict[0].keys()
         dict_merge = dict()
         for k in keys_merge:
-            lista_k = sorted([d[k] for d in lista_dfs_o_dict if d[k] is not None], key=lambda item: item.index[0])
-            dict_merge[k] = pdmerge_respeta_tz(lista_k[0].index.tz, _merge_lista, lista_k)
+            lista_k = sorted([d[k] for d in lista_dfs_o_dict if (d is not None) and (d[k] is not None)],
+                                 key=lambda item: item.index[0])
+            try:
+                dict_merge[k] = pdmerge_respeta_tz(lista_k[0].index.tz, _merge_lista, lista_k)
+            except AttributeError:
+                print('ERROR!')
+                dict_merge[k] = pdmerge_respeta_tz(None, _merge_lista, lista_k)
         return dict_merge
     elif len(lista_dfs_o_dict) > 0:
-        lista_merge = sorted(lista_dfs_o_dict, key=lambda item: item.index[0])
-        return pdmerge_respeta_tz(lista_merge[0].index.tz, _merge_lista, lista_merge)
-    else:
-        return None
+        try:
+            lista_merge = sorted(lista_dfs_o_dict, key=lambda item: item.index[0])
+            return pdmerge_respeta_tz(lista_merge[0].index.tz, _merge_lista, lista_merge)
+        except AttributeError:
+            lista_dfs_o_dict = [l for l in lista_dfs_o_dict if l is not None]
+            if len(lista_dfs_o_dict) > 0:
+                lista_merge = sorted(lista_dfs_o_dict, key=lambda item: item.index[0])
+                return pdmerge_respeta_tz(lista_merge[0].index.tz, _merge_lista, lista_merge)
+        except TypeError as e:
+            print(e, e.__class__)
+            print(lista_dfs_o_dict)
+    return None

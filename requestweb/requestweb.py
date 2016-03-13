@@ -1,11 +1,11 @@
 # -*- coding: utf-8 -*-
 import datetime as dt
-import httplib2
-from httplib2 import Http
+from json.decoder import JSONDecodeError
 import logging
 import numpy as np
 import pandas as pd
-import socket
+import requests
+from requests.exceptions import ConnectionError, ConnectTimeout, HTTPError
 import time
 from dataweb.threadingtasks import procesa_tareas_paralelo
 from dataweb.mergedataweb import merge_data
@@ -35,40 +35,47 @@ DIAS_MERGE_MAX = 5
 DATE_FMT = '%Y-%m-%d'
 
 
-def request_data_url(url, http=None, num_retries=NUM_RETRIES, timeout=TIMEOUT):
+def request_data_url(url, headers=None, num_retries=NUM_RETRIES, timeout=TIMEOUT,
+                     params_request=None, json_req=False, **kwargs_req):
     """
     Realiza sucesivos intentos de request a una url dada, intentándolo hasta que recibe un status 200 (OK)
     y el texto recibido es mayor que MIN_LEN_REQUEST (=10).
     Resulta útil cuando se están realizando múltiples requests al mismo servidor (por velocidad), y no siempre
     las respuestas que emite son correctas.
     :param url:
-    :param http:
+    :param headers:
     :param num_retries:
     :param timeout:
     """
-    if http is None:
-        http = Http(timeout=timeout)
     count, status, response = 0, -1, None
+    kwargs_req.update(timeout=timeout)
     while count < num_retries:
         try:
-            (status, response) = http.request(url)
-            if status['status'] == '200' and len(response) > MIN_LEN_REQUEST:
-                break  # SALIDA BUCLE WHILE
-        except httplib2.ServerNotFoundError as e:
+            resp = requests.get(url, headers=headers, params=params_request, **kwargs_req)
+            status = resp.status_code
+            if status == 200:
+                if json_req:
+                    response = resp.json()
+                else:
+                    response = resp.content.decode()
+                if json_req or len(response) > MIN_LEN_REQUEST:
+                    break  # SALIDA BUCLE WHILE
+            elif status == 503:  # HTTP 503 Service unavailable
+                print_warn('RECIBIDO ERROR HTTP 503 Service unavailable en url:"{}". Esperando 10 segs'.format(url))
+                time.sleep(10)
+        except (ConnectionError, ConnectTimeout, HTTPError) as e:
             if count == num_retries - 1:
                 print_warn('ERROR: ' + str(e) + ' ¿No hay conexión de internet??')
+                print_warn(e.__name__)
                 logging.error('ERROR: ' + str(e) + ' ¿No hay conexión de internet??')
-        except socket.error as e:  # [Errno 60] Operation timed out
-            if count == num_retries - 2:
-                print_warn('{}º EXCEPCIÓN: 60 Operation timed out?? [{}] EXC: {}'.format(count + 1, url, e))
-                logging.debug('{}º EXCEPCIÓN: 60 Operation timed out?? [{}] EXC: {}'.format(count + 1, url, e))
             time.sleep(1)
-        except (httplib2.HttpLib2Error, httplib2.HttpLib2ErrorWithResponse) as e:  # , urllib.URLError) as e:
-            if count > 1:
-                print_warn(type(e))
-                logging.error(type(e))
-                print_warn('HttpLib2Error?, HttpLib2ErrorWithResponse?, urllib.URLError?')
-                # notTODO except error: [Errno 60] Operation timed out; ResponseNotReady
+        except JSONDecodeError as e:
+            if count == num_retries - 1:
+                # print_warn('ERROR: {}\n-> RESPONSE: {}\n{}'.format(e, resp, resp.content))
+                # logging.error('ERROR: {}\n-> RESPONSE: {}\n{}'.format(e, resp, resp.content))
+                print_warn('ERROR: {}'.format(e))
+                logging.error('ERROR: {}'.format(e))
+            time.sleep(1)
         except TypeError as e:
             print_warn('TypeError')
             logging.error(str(e))
@@ -88,7 +95,8 @@ def request_data_url(url, http=None, num_retries=NUM_RETRIES, timeout=TIMEOUT):
 def get_data_en_intervalo(d0=None, df=None, date_fmt=DATE_FMT,
                           usar_multithread=USAR_MULTITHREAD, max_threads_requests=MAX_THREADS_REQUESTS,
                           timeout=TIMEOUT, num_retries=NUM_RETRIES,
-                          func_procesa_data_dia=None, func_url_data_dia=None, max_act_exec=None, verbose=True):
+                          func_procesa_data_dia=None, func_url_data_dia=None, max_act_exec=None, verbose=True,
+                          data_extra_request=None):
         """
         Obtiene los datos en bruto de la red realizando múltiples requests al tiempo
         Procesa los datos en bruto obtenidos de la red convirtiendo a Pandas DataFrame
@@ -128,42 +136,65 @@ def get_data_en_intervalo(d0=None, df=None, date_fmt=DATE_FMT,
                 return merge_data(list(dict_data_merge.values()))
 
         def _hay_errores_en_datos_obtenidos(dict_data_obtenida):
-            data_es_none = [v is None for v in dict_data_obtenida.values()]
+            keys = list(sorted(dict_data_obtenida.keys()))
+            data_es_none = [dict_data_obtenida[k] is None for k in keys]
+            error = False
             if any(data_es_none):
-                bad_days = [k for k, is_bad in zip(list(sorted(dict_data_obtenida.keys())), data_es_none) if is_bad]
-                logging.error('HAY TAREAS NO REALIZADAS:\n{}'.format(bad_days))
-                if verbose:
-                    print_err('HAY TAREAS NO REALIZADAS:\n{}'.format(bad_days))
-                return True
-            return False
+                df_err = pd.DataFrame({'key': keys, 'is_bad': data_es_none})
+                df_err['date'] = df_err['key'].apply(lambda x: pd.Timestamp(x))
+                df_err['delta'] = (df_err['date'] - df_err['date'].shift(1)).fillna(3600 * 24)
+                df_g = df_err[~df_err['is_bad']].copy()
+                df_g['delta_g'] = (df_g['date'] - df_g['date'].shift(1)).fillna(3600 * 24)
+                # print(df_err)
+                # print(df_err['delta'].describe())
+                # print(df_g['delta_g'].describe())
 
-        def _obtiene_request(url, key, http):
+                if df_g['delta_g'].max() < pd.Timedelta(2, 'D'):
+                    bad_days = df_err[df_err['is_bad']]['key'].tolist()
+                    if verbose:
+                        print_err('HAY TAREAS NO REALIZADAS ({}):\n{}'.format(len(bad_days), bad_days))
+                    logging.error('HAY TAREAS NO REALIZADAS ({}):\n{}'.format(len(bad_days), bad_days))
+                    error = False
+                else:
+                    if verbose:
+                        print_err('NO HAY NINGUNA TAREA REALIZADA!')
+                    logging.error('NO HAY NINGUNA TAREA REALIZADA!')
+                    bad_days = df_err['key'].tolist()
+                    error = True
+                for k in bad_days:
+                    dict_data_obtenida.pop(k)
+            return error
+
+        def _obtiene_request(url, key, headers=None, p_req=None, json_r=False, **kwargs_r):
             if type(url) is list:
-                lista_stat, lista_resp = [], []
-                for u in url:
-                    stat_response = request_data_url(u, http, num_retries, timeout)
-                    lista_stat.append(stat_response[0])
-                    lista_resp.append(stat_response[1])
-                dict_data[key] = (lista_stat, lista_resp)
+                results = [request_data_url(u, headers, num_retries, timeout, p_req, json_r, **kwargs_r) for u in url]
+                dict_data[key] = list(zip(*results))
             else:
-                stat_response = request_data_url(url, http, num_retries, timeout)
+                stat_response = request_data_url(url, headers, num_retries, timeout, p_req, json_r, **kwargs_r)
                 dict_data[key] = stat_response
 
         def _obtiene_data_dia(key, dict_data_responses):
             url = func_url_data_dia(key)
-            http = Http(timeout=timeout)
+            extra = dict_data_responses[key] if type(dict_data_responses[key]) is dict else {}
+            headers = extra.pop('headers', None)
+            json_req = extra.pop('json_req', False)
+            params_request = extra.pop('params_request', None)
             try:
                 count_process, ok = 0, -1
                 while count_process < num_retries and ok != 0:
-                    _obtiene_request(url, key, http)
+                    _obtiene_request(url, key, headers, params_request, json_req, **extra)
                     data_import, ok = func_procesa_data_dia(key, dict_data_responses[key][1])
                     if ok == 0:
                         dict_data_responses[key] = data_import
+                    elif ok == -2: # Código de salida temprana:
+                        count_process = num_retries
                     count_process += 1
+                if ok != 0:
+                    dict_data_responses[key] = None
             except Exception as e:
                 if verbose:
-                    print_err('ERROR PROCESANDO DATA!???? (Exception: {}; KEY: {}; URL: {})'.format(e, key, url))
-                logging.error('ERROR PROCESANDO DATA!???? (Exception: {}; KEY: {}; URL: {})'.format(e, key, url))
+                    print_err('PROCESANDO DATA!???? (Exception: {}; KEY: {}; URL: {})'.format(e, key, url))
+                logging.error('PROCESANDO DATA!???? (Exception: {}; KEY: {}; URL: {})'.format(e, key, url))
                 dict_data_responses[key] = None
 
         tic_ini = time.time()
@@ -171,17 +202,73 @@ def get_data_en_intervalo(d0=None, df=None, date_fmt=DATE_FMT,
         if max_act_exec:  # BORRAR. Es para limitar el nº de días adquiridos de golpe.
             lista_dias = lista_dias[:max_act_exec]
         num_dias = len(lista_dias)
-        dict_data = dict(zip(lista_dias, np.zeros(num_dias)))
+        if data_extra_request is None:
+            dict_data = dict(zip(lista_dias, np.zeros(num_dias)))
+        else:
+            dict_data = dict(zip(lista_dias, [data_extra_request.copy() for _ in range(num_dias)]))
         # IMPORTA DATOS Y LOS PROCESA
         procesa_tareas_paralelo(lista_dias, dict_data, _obtiene_data_dia,
                                 '\nPROCESADO DE DATOS WEB DE %lu DÍAS',
                                 usar_multithread, max_threads_requests, verbose=verbose)
         hay_errores = _hay_errores_en_datos_obtenidos(dict_data)
         # MERGE DATOS
+        # print(len(lista_dias), len(dict_data.keys()))
         if not hay_errores and num_dias > 0:
-            data_merge = _procesa_merge_datos_dias(lista_dias, dict_data)
+            # data_merge = _procesa_merge_datos_dias(lista_dias, dict_data)
+            data_merge = _procesa_merge_datos_dias(list(sorted(dict_data.keys())), dict_data)
             str_resumen_import = '\n%lu días importados [Proceso Total %.2f seg, %.4f seg/día]' \
                                  % (num_dias, time.time() - tic_ini, (time.time() - tic_ini) / float(num_dias))
             return data_merge, hay_errores, str_resumen_import
         else:
-            return None, hay_errores, 'ERROR IMPORTANDO'
+            return None, hay_errores, 'ERROR IMPORTANDO!!'
+
+
+# OLD MODE (vía httplib2)
+# def request_data_url(url, http=None, num_retries=NUM_RETRIES, timeout=TIMEOUT):
+#     """
+#     Realiza sucesivos intentos de request a una url dada, intentándolo hasta que recibe un status 200 (OK)
+#     y el texto recibido es mayor que MIN_LEN_REQUEST (=10).
+#     Resulta útil cuando se están realizando múltiples requests al mismo servidor (por velocidad), y no siempre
+#     las respuestas que emite son correctas.
+#     :param url:
+#     :param http:
+#     :param num_retries:
+#     :param timeout:
+#     """
+#     if http is None:
+#         http = Http(timeout=timeout)
+#     count, status, response = 0, -1, None
+#     while count < num_retries:
+#         try:
+#             (status, response) = http.request(url)
+#             if status['status'] == '200' and len(response) > MIN_LEN_REQUEST:
+#                 break  # SALIDA BUCLE WHILE
+#         except httplib2.ServerNotFoundError as e:
+#             if count == num_retries - 1:
+#                 print_warn('ERROR: ' + str(e) + ' ¿No hay conexión de internet??')
+#                 logging.error('ERROR: ' + str(e) + ' ¿No hay conexión de internet??')
+#         except socket.error as e:  # [Errno 60] Operation timed out
+#             if count == num_retries - 2:
+#                 print_warn('{}º EXCEPCIÓN: 60 Operation timed out?? [{}] EXC: {}'.format(count + 1, url, e))
+#                 logging.debug('{}º EXCEPCIÓN: 60 Operation timed out?? [{}] EXC: {}'.format(count + 1, url, e))
+#             time.sleep(1)
+#         except (httplib2.HttpLib2Error, httplib2.HttpLib2ErrorWithResponse) as e:  # , urllib.URLError) as e:
+#             if count > 1:
+#                 print_warn(type(e))
+#                 logging.error(type(e))
+#                 print_warn('HttpLib2Error?, HttpLib2ErrorWithResponse?, urllib.URLError?')
+#                 # notTODO except error: [Errno 60] Operation timed out; ResponseNotReady
+#         except TypeError as e:
+#             print_warn('TypeError')
+#             logging.error(str(e))
+#             print_warn(str(e))
+#         except Exception as e:
+#             if count > 0:
+#                 logging.error('%luº Exception no reconocida: %s!!' % (count + 1, type(e)))
+#                 print_err('%luº Exception no reconocida: %s!!' % (count + 1, type(e)))
+#                 print_warn(str(e))
+#         count += 1
+#     if count > 0 and count == num_retries:
+#         print_err('NO SE HA PODIDO OBTENER LA INFO EN %s' % url)
+#         logging.error('NO SE HA PODIDO OBTENER LA INFO EN %s' % url)
+#     return status, response
