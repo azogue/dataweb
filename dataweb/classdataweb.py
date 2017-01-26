@@ -11,9 +11,9 @@ import numpy as np
 import pandas as pd
 import pytz
 from dataweb.mergedataweb import merge_data
+from dataweb.requestweb import USAR_MULTITHREAD, NUM_RETRIES, TIMEOUT, DATE_FMT, MAX_THREADS_REQUESTS
+from dataweb.requestweb import get_data_en_intervalo
 from prettyprinting import print_warn, print_err, print_ok, print_info, print_secc, print_bold
-from dataweb.requestweb.requestweb import USAR_MULTITHREAD, NUM_RETRIES, TIMEOUT, DATE_FMT, MAX_THREADS_REQUESTS
-from dataweb.requestweb.requestweb import get_data_en_intervalo
 
 
 __author__ = 'Eugenio Panadero'
@@ -100,7 +100,7 @@ class DataWeb(object):
 
     # you can override this on the child classes
     def post_update_data(self):
-        # raise NotImplementedError
+        """(Optional) Posibilidad de procesar todos los datos al final del update."""
         pass
 
     def __get_data_en_intervalo(self, d0=None, df=None):
@@ -289,16 +289,14 @@ class DataWeb(object):
         :param key_data:
         """
 
-        def _save_data_en_key(store, key_save, data_save):
+        def _save_data_en_key(store, key_save, data_save, func_err):
             try:
                 # TODO Revisar errores grabación HDF5 mode table vs fixed:
                 # TypeError: unorderable types: NoneType() >= tuple() al grabar HDF5 como 'table'
                 # store.put(key_save, data_save, format='table', mode='w')
                 store.put(key_save, data_save, mode='w')
             except TypeError as e:
-                if self.verbose:
-                    print_err('ERROR SALVANDO INFO: {}\nKEY: {}; DATA:\n{}'.format(e, key_save, data_save))
-                logging.error('ERROR SALVANDO INFO: {}\nKEY: {}; DATA:\n{}'.format(e, key_save, data_save))
+                func_err('ERROR SALVANDO INFO: {}\nKEY: {}; DATA:\n{}'.format(e, key_save, data_save), 'error')
 
         self.integridad_data()
         self.store.open()
@@ -307,11 +305,11 @@ class DataWeb(object):
                 # Se elimina (backup) el fichero h5 anterior
                 self._backup_last_store()
                 for k in self.data.keys():
-                    _save_data_en_key(self.store, k, self.data[k])
+                    _save_data_en_key(self.store, k, self.data[k], self.printif)
             else:
-                _save_data_en_key(self.store, key_data, self.data[key_data])
+                _save_data_en_key(self.store, key_data, self.data[key_data], self.printif)
         else:
-            _save_data_en_key(self.store, key_data or self.masterkey, dataframe)
+            _save_data_en_key(self.store, key_data or self.masterkey, dataframe, self.printif)
         self.store.close()
 
     def load_data(self, key=None, **kwargs):
@@ -331,24 +329,23 @@ class DataWeb(object):
         self.store.close()
         self.integridad_data()
 
-    def append_delta_index(self, ts_data=None, data_delta=None, key=KEY_DATA):
-        reasign = False
-        if data_delta is None:
-            if self.data is not None:
-                data_delta = self.data[key]
-            else:
-                logging.error('NO HAY DATOS PARA AÑADIR DELTA')
-                print_err('NO HAY DATOS PARA AÑADIR DELTA')
-                return None
-            reasign = True
-        data_delta['delta'] = data_delta.index.tz_convert('UTC')
-        if ts_data is not None:
-            data_delta['delta'] = (data_delta['delta'] - data_delta['delta'].shift(1)).fillna(ts_data)
-            data_delta['delta_T'] = data_delta['delta'].apply(lambda x: pd.Timedelta(x).seconds) / ts_data
-        else:
-            data_delta['delta'] = (data_delta['delta'] - data_delta['delta'].shift(1)).fillna(0)
-        if reasign:
-            self.data[key] = data_delta
-        else:
-            return data_delta
+    # def append_delta_index(self, ts_data=None, data_delta=None, key=KEY_DATA):
+    #     reasign = False
+    #     if data_delta is None:
+    #         if self.data is not None:
+    #             data_delta = self.data[key]
+    #         else:
+    #             self.printif('NO HAY DATOS PARA AÑADIR DELTA', 'error')
+    #             return None
+    #         reasign = True
+    #     data_delta['delta'] = data_delta.index.tz_convert('UTC')
+    #     if ts_data is not None:
+    #         data_delta['delta'] = (data_delta['delta'] - data_delta['delta'].shift(1)).fillna(ts_data)
+    #         data_delta['delta_T'] = data_delta['delta'].apply(lambda x: pd.Timedelta(x).seconds) / ts_data
+    #     else:
+    #         data_delta['delta'] = (data_delta['delta'] - data_delta['delta'].shift(1)).fillna(0)
+    #     if reasign:
+    #         self.data[key] = data_delta
+    #     else:
+    #         return data_delta
 
