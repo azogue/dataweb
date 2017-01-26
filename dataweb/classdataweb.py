@@ -5,14 +5,15 @@ Gestión de datos recogidos en web de forma periódica
 """
 import datetime as dt
 import logging
-import numpy as np
 import os
+
+import numpy as np
 import pandas as pd
 import pytz
-from prettyprinting import print_warn, print_err, print_ok, print_info, print_secc, print_bold
-from dataweb.requestweb.requestweb import get_data_en_intervalo
 from dataweb.mergedataweb import merge_data
+from prettyprinting import print_warn, print_err, print_ok, print_info, print_secc, print_bold
 from dataweb.requestweb.requestweb import USAR_MULTITHREAD, NUM_RETRIES, TIMEOUT, DATE_FMT, MAX_THREADS_REQUESTS
+from dataweb.requestweb.requestweb import get_data_en_intervalo
 
 
 __author__ = 'Eugenio Panadero'
@@ -89,12 +90,12 @@ class DataWeb(object):
 
     # you want to override this on the child classes
     def url_data_dia(self, key_dia):
-        # url = func_url_data_dia(key_dia)
+        """Override this method: url = func_url_data_dia(key_dia)"""
         raise NotImplementedError
 
     # you want to override this on the child classes
     def procesa_data_dia(self, key_dia, response):
-        # data_import, ok = func_procesa_data_dia(key_dia, response)
+        """Override this method: data_import, ok = func_procesa_data_dia(key_dia, response)"""
         raise NotImplementedError
 
     # you can override this on the child classes
@@ -141,11 +142,12 @@ class DataWeb(object):
         # return tmax, num_entradas
         if key_revisar in data_revisar.keys():
             data_rev = data_revisar[key_revisar]
-            return data_rev.index[-1].to_datetime(), len(data_rev)
+            return data_rev.index[-1].to_pydatetime(), len(data_rev)
         else:
-            return pd.Timestamp(dt.datetime.strptime(self.DATE_INI, self.DATE_FMT), tz=self.TZ).to_datetime(), 0
+            return pd.Timestamp(dt.datetime.strptime(self.DATE_INI, self.DATE_FMT), tz=self.TZ).to_pydatetime(), 0
 
     def printif(self, obj_print, tipo_print=None):
+        """Color output & logging."""
         if tipo_print is None:
             if self.verbose:
                 print(obj_print)
@@ -186,7 +188,7 @@ class DataWeb(object):
             data_act = data_ant
             now = dt.datetime.now(tz=self.TZ)
             if self.DATE_FIN is not None:
-                now = min(now, pd.Timestamp(self.DATE_FIN, tz=self.TZ).to_datetime())
+                now = min(now, pd.Timestamp(self.DATE_FIN, tz=self.TZ).to_pydatetime())
             delta = int(np.ceil((now - tmax).total_seconds() / self.TS_DATA))
             if delta > self.NUM_TS_MIN_PARA_ACT:
                 d0, df = tmax.date(), now.date()
@@ -203,7 +205,7 @@ class DataWeb(object):
         return data_act, hay_nueva_info
 
     def update_data(self, forzar_update=False):
-        # Check/Lectura de base de datos hdf en disco (local)
+        """Check/Lectura de base de datos hdf en disco (local)."""
         try:
             if forzar_update:
                 self.printif('Se procede a actualizar TODOS los datos (force update ON)', 'info')
@@ -254,6 +256,7 @@ class DataWeb(object):
             _assert_integridad(data_integr)
 
     def info_data(self, data_info=None, completo=True, key=None, verbose=True):
+        """Show some info."""
 
         def _info_dataframe(data_frame):
             if completo:

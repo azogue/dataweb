@@ -15,7 +15,7 @@ __version__ = "1.0"
 __maintainer__ = "Eugenio Panadero"
 
 
-def pdmerge_respeta_tz(tz_ant, func_merge, *args, **kwargs):
+def pdmerge_respeta_tz(func_merge, tz_ant=None, *args, **kwargs):
     """
     Programación defensiva por issue: pandas BUG (a veces, el index pierde el tz):
         - issue #7795: concat of objects with the same timezone get reset to UTC;
@@ -35,6 +35,7 @@ def pdmerge_respeta_tz(tz_ant, func_merge, *args, **kwargs):
     return df_merged
 
 
+# noinspection PyTypeChecker
 def merge_data(lista_dfs_o_dict, keys_merge=None):
     """
     Realiza y devuelve el merge de una lista de pandas DataFrame's (o bien de un diccionario de {key:pd.Dataframe}).
@@ -53,7 +54,7 @@ def merge_data(lista_dfs_o_dict, keys_merge=None):
             df0.update(lista_dfs[1])
         elif ((all([len(df_i) == 1 for df_i in lista_dfs])) or
                 (type(lista_dfs[0].index.freq) is Day and len(lista_dfs_o_dict) > 2)):
-            df0 = pd.concat(lista_dfs)
+            df0 = pd.DataFrame(pd.concat(lista_dfs))
             if lista_dfs[0].index.freq and df0.index.freq is None:
                 df0.index.freq = lista_dfs[0].index.freq
         else:
@@ -68,22 +69,22 @@ def merge_data(lista_dfs_o_dict, keys_merge=None):
         dict_merge = dict()
         for k in keys_merge:
             lista_k = sorted([d[k] for d in lista_dfs_o_dict if (d is not None) and (d[k] is not None)],
-                                 key=lambda item: item.index[0])
+                             key=lambda item: item.index[0])
             try:
-                dict_merge[k] = pdmerge_respeta_tz(lista_k[0].index.tz, _merge_lista, lista_k)
+                dict_merge[k] = pdmerge_respeta_tz(_merge_lista, lista_k[0].index.tz, lista_k)
             except AttributeError:
                 print('ERROR!')
-                dict_merge[k] = pdmerge_respeta_tz(None, _merge_lista, lista_k)
+                dict_merge[k] = pdmerge_respeta_tz(_merge_lista, None, lista_k)
         return dict_merge
     elif len(lista_dfs_o_dict) > 0:
         try:
             lista_merge = sorted(lista_dfs_o_dict, key=lambda item: item.index[0])
-            return pdmerge_respeta_tz(lista_merge[0].index.tz, _merge_lista, lista_merge)
+            return pdmerge_respeta_tz(_merge_lista, lista_merge[0].index.tz, lista_merge)
         except AttributeError:
             lista_dfs_o_dict = [l for l in lista_dfs_o_dict if l is not None]
             if len(lista_dfs_o_dict) > 0:
                 lista_merge = sorted(lista_dfs_o_dict, key=lambda item: item.index[0])
-                return pdmerge_respeta_tz(lista_merge[0].index.tz, _merge_lista, lista_merge)
+                return pdmerge_respeta_tz(_merge_lista, lista_merge[0].index.tz, lista_merge)
         except TypeError as e:
             print(e, e.__class__)
             print(lista_dfs_o_dict)

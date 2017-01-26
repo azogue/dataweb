@@ -1,4 +1,8 @@
 # -*- coding: utf-8 -*-
+"""
+Gestión de datos recogidos en web de forma periódica
+@author: Eugenio Panadero
+"""
 import datetime as dt
 from json.decoder import JSONDecodeError
 import logging
@@ -12,10 +16,6 @@ from dataweb.mergedataweb import merge_data
 from prettyprinting import print_warn, print_err
 
 
-"""
-Gestión de datos recogidos en web de forma periódica
-@author: Eugenio Panadero
-"""
 __author__ = 'Eugenio Panadero'
 __copyright__ = "Copyright 2015, AzogueLabs"
 __credits__ = ["Eugenio Panadero"]
@@ -46,6 +46,8 @@ def request_data_url(url, headers=None, num_retries=NUM_RETRIES, timeout=TIMEOUT
     :param headers:
     :param num_retries:
     :param timeout:
+    :param params_request:
+    :param json_req:
     """
     count, status, response = 0, -1, None
     kwargs_req.update(timeout=timeout)
@@ -186,7 +188,7 @@ def get_data_en_intervalo(d0=None, df=None, date_fmt=DATE_FMT,
                     data_import, ok = func_procesa_data_dia(key, dict_data_responses[key][1])
                     if ok == 0:
                         dict_data_responses[key] = data_import
-                    elif ok == -2: # Código de salida temprana:
+                    elif ok == -2:  # Código de salida temprana:
                         count_process = num_retries
                     count_process += 1
                 if ok != 0:
