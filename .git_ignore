@@ -1,0 +1,13 @@
+.git_ignore
+*.pyc
+.DS_Store
+.idea
+
+# Packages
+*.egg
+*.egg-info
+dist
+build
+eggs
+sdist
+develop-eggs
