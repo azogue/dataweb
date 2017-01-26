@@ -9,3 +9,9 @@ Está preparada para datos indexados por tiempo localizado, para gestionar adecu
   `path_database`, `DATE_INI`, `DATE_FMT`, `TZ`, `TS_DATA` (periodo de muestreo de las entradas), etc.
 
   La configuración de los requests a web se realiza mediante `NUM_RETRIES`, `TIMEOUT` y `MAX_THREADS_REQUESTS`. Este último debe tunearse adecuadamente en función del servidor a acceder, con tal de no saturarlo.
+
+## Instalación
+
+```
+pip3 install dataweb
+```
