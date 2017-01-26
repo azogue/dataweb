@@ -1,4 +1,3 @@
-.git_ignore
 *.pyc
 .DS_Store
 .idea
