@@ -329,23 +329,24 @@ class DataWeb(object):
         self.store.close()
         self.integridad_data()
 
-    # def append_delta_index(self, ts_data=None, data_delta=None, key=KEY_DATA):
-    #     reasign = False
-    #     if data_delta is None:
-    #         if self.data is not None:
-    #             data_delta = self.data[key]
-    #         else:
-    #             self.printif('NO HAY DATOS PARA AÑADIR DELTA', 'error')
-    #             return None
-    #         reasign = True
-    #     data_delta['delta'] = data_delta.index.tz_convert('UTC')
-    #     if ts_data is not None:
-    #         data_delta['delta'] = (data_delta['delta'] - data_delta['delta'].shift(1)).fillna(ts_data)
-    #         data_delta['delta_T'] = data_delta['delta'].apply(lambda x: pd.Timedelta(x).seconds) / ts_data
-    #     else:
-    #         data_delta['delta'] = (data_delta['delta'] - data_delta['delta'].shift(1)).fillna(0)
-    #     if reasign:
-    #         self.data[key] = data_delta
-    #     else:
-    #         return data_delta
+    def append_delta_index(self, ts_data=None, data_delta=None, key=KEY_DATA):
+        """Append columns with ∆T between rows to data."""
+        reasign = False
+        if data_delta is None:
+            if self.data is not None:
+                data_delta = self.data[key]
+            else:
+                self.printif('NO HAY DATOS PARA AÑADIR DELTA', 'error')
+                return None
+            reasign = True
+        data_delta['delta'] = data_delta.index.tz_convert('UTC')
+        if ts_data is not None:
+            data_delta['delta'] = (data_delta['delta'] - data_delta['delta'].shift(1)).fillna(ts_data)
+            data_delta['delta_T'] = data_delta['delta'].apply(lambda x: pd.Timedelta(x).seconds) / ts_data
+        else:
+            data_delta['delta'] = (data_delta['delta'] - data_delta['delta'].shift(1)).fillna(0)
+        if reasign:
+            self.data[key] = data_delta
+        else:
+            return data_delta
 
