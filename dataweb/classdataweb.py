@@ -13,7 +13,6 @@ import pytz
 from dataweb.mergedataweb import merge_data
 from dataweb.requestweb import USAR_MULTITHREAD, NUM_RETRIES, TIMEOUT, DATE_FMT, MAX_THREADS_REQUESTS
 from dataweb.requestweb import get_data_en_intervalo
-from prettyprinting import print_warn, print_err, print_ok, print_info, print_secc, print_bold
 
 
 __author__ = 'Eugenio Panadero'
@@ -148,35 +147,14 @@ class DataWeb(object):
 
     def printif(self, obj_print, tipo_print=None):
         """Color output & logging."""
-        if tipo_print is None:
-            if self.verbose:
-                print(obj_print)
-        elif tipo_print == 'secc':
-            if self.verbose:
-                print_secc(obj_print)
-        elif tipo_print == 'ok':
-            if self.verbose:
-                print_ok(obj_print)
+        if self.verbose:
+            print(obj_print)
+        if tipo_print == 'ok':
             logging.info(obj_print)
-        elif tipo_print == 'info':
-            if self.verbose:
-                print_info(obj_print)
         elif tipo_print == 'error':
-            if self.verbose:
-                print_err(obj_print)
             logging.error(obj_print)
         elif tipo_print == 'warning':
-            if self.verbose:
-                print_warn(obj_print)
             logging.warning(obj_print)
-        elif tipo_print == 'bold':
-            if self.verbose:
-                print_bold(obj_print)
-        else:
-            if self.verbose:
-                print_err(obj_print)
-            logging.error(obj_print)
-            assert()
 
     def __actualiza_datos(self, data_ant=None, tmax=None):
         data_act, hay_nueva_info = None, False

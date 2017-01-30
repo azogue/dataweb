@@ -13,7 +13,6 @@ from requests.exceptions import ConnectionError, ConnectTimeout, HTTPError
 import time
 from dataweb.threadingtasks import procesa_tareas_paralelo
 from dataweb.mergedataweb import merge_data
-from prettyprinting import print_warn, print_err
 
 
 __author__ = 'Eugenio Panadero'
@@ -63,33 +62,33 @@ def request_data_url(url, headers=None, num_retries=NUM_RETRIES, timeout=TIMEOUT
                 if json_req or len(response) > MIN_LEN_REQUEST:
                     break  # SALIDA BUCLE WHILE
             elif status == 503:  # HTTP 503 Service unavailable
-                print_warn('RECIBIDO ERROR HTTP 503 Service unavailable en url:"{}". Esperando 10 segs'.format(url))
+                print('RECIBIDO ERROR HTTP 503 Service unavailable en url:"{}". Esperando 10 segs'.format(url))
                 time.sleep(10)
         except (ConnectionError, ConnectTimeout, HTTPError) as e:
             if count == num_retries - 1:
-                print_warn('ERROR: ' + str(e) + ' ¿No hay conexión de internet??')
-                print_warn(e.__name__)
+                print('ERROR: ' + str(e) + ' ¿No hay conexión de internet??')
+                print(e.__name__)
                 logging.error('ERROR: ' + str(e) + ' ¿No hay conexión de internet??')
             time.sleep(1)
         except JSONDecodeError as e:
             if count == num_retries - 1:
-                # print_warn('ERROR: {}\n-> RESPONSE: {}\n{}'.format(e, resp, resp.content))
+                # print('ERROR: {}\n-> RESPONSE: {}\n{}'.format(e, resp, resp.content))
                 # logging.error('ERROR: {}\n-> RESPONSE: {}\n{}'.format(e, resp, resp.content))
-                print_warn('ERROR: {}'.format(e))
+                print('ERROR: {}'.format(e))
                 logging.error('ERROR: {}'.format(e))
             time.sleep(1)
         except TypeError as e:
-            print_warn('TypeError')
+            print('TypeError')
             logging.error(str(e))
-            print_warn(str(e))
+            print(str(e))
         except Exception as e:
             if count > 0:
                 logging.error('%luº Exception no reconocida: %s!!' % (count + 1, type(e)))
-                print_err('%luº Exception no reconocida: %s!!' % (count + 1, type(e)))
-                print_warn(str(e))
+                print('%luº Exception no reconocida: %s!!' % (count + 1, type(e)))
+                print(str(e))
         count += 1
     if count > 0 and count == num_retries:
-        print_err('NO SE HA PODIDO OBTENER LA INFO EN %s' % url)
+        print('NO SE HA PODIDO OBTENER LA INFO EN %s' % url)
         logging.error('NO SE HA PODIDO OBTENER LA INFO EN %s' % url)
     return status, response
 
@@ -154,12 +153,12 @@ def get_data_en_intervalo(d0=None, df=None, date_fmt=DATE_FMT,
                 if df_g['delta_g'].max() < pd.Timedelta(2, 'D'):
                     bad_days = df_err[df_err['is_bad']]['key'].tolist()
                     if verbose:
-                        print_err('HAY TAREAS NO REALIZADAS ({}):\n{}'.format(len(bad_days), bad_days))
+                        print('HAY TAREAS NO REALIZADAS ({}):\n{}'.format(len(bad_days), bad_days))
                     logging.error('HAY TAREAS NO REALIZADAS ({}):\n{}'.format(len(bad_days), bad_days))
                     error = False
                 else:
                     if verbose:
-                        print_err('NO HAY NINGUNA TAREA REALIZADA!')
+                        print('NO HAY NINGUNA TAREA REALIZADA!')
                     logging.error('NO HAY NINGUNA TAREA REALIZADA!')
                     bad_days = df_err['key'].tolist()
                     error = True
@@ -195,7 +194,7 @@ def get_data_en_intervalo(d0=None, df=None, date_fmt=DATE_FMT,
                     dict_data_responses[key] = None
             except Exception as e:
                 if verbose:
-                    print_err('PROCESANDO DATA!???? (Exception: {}; KEY: {}; URL: {})'.format(e, key, url))
+                    print('PROCESANDO DATA!???? (Exception: {}; KEY: {}; URL: {})'.format(e, key, url))
                 logging.error('PROCESANDO DATA!???? (Exception: {}; KEY: {}; URL: {})'.format(e, key, url))
                 dict_data_responses[key] = None
 

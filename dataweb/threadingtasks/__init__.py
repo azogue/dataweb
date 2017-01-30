@@ -6,7 +6,6 @@ Gestión de datos recogidos en web de forma periódica
 import threading
 import time
 import numpy as np
-from prettyprinting import print_ok, print_bold
 
 
 __author__ = 'Eugenio Panadero'
@@ -36,7 +35,7 @@ def procesa_tareas_paralelo(lista_tareas, dict_data, func_process,
 
     num_tareas = len(lista_tareas)
     if titulo and num_tareas > 1:
-        print_bold(titulo % num_tareas)
+        print(titulo % num_tareas)
     if num_tareas > 1 and usar_multithread:
         tic_init = time.time()
         threads = [threading.Thread(target=func_process, args=(tarea, dict_data,)) for tarea in lista_tareas]
@@ -53,10 +52,10 @@ def procesa_tareas_paralelo(lista_tareas, dict_data, func_process,
             cont_tareas += len(th)
         tic_fin = (time.time() - tic_init)
         if num_tareas > 1 and usar_multithread and len(lista_threads) > 1 and verbose:
-            print_ok(u"Tiempo de proceso de tareas en paralelo TOTAL (%lu tareas): %.2f seg [%.4f seg/tarea]"
-                     % (num_tareas, tic_fin, tic_fin / num_tareas))
+            print("Tiempo de proceso de tareas en paralelo TOTAL ({} tareas): {:.2f} seg [{:.4f} seg/tarea]"
+                  .format(num_tareas, tic_fin, tic_fin / num_tareas))
     else:
         for tarea in lista_tareas:
             if num_tareas > 3 and verbose:
-                print_bold('Tarea: %s' % str(tarea))
+                print('Tarea: %s' % str(tarea))
             func_process(tarea, dict_data)
