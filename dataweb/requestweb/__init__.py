@@ -4,7 +4,10 @@ Gestión de datos recogidos en web de forma periódica
 @author: Eugenio Panadero
 """
 import datetime as dt
-from json.decoder import JSONDecodeError
+try:
+    from json.decoder import JSONDecodeError
+except ImportError:
+    JSONDecodeError = ValueError
 import logging
 import numpy as np
 import pandas as pd
